@@ -1,19 +1,28 @@
 public class Main {
     public static void main(String[] args) {
-        Client client = new Client();
-
-        if (!client.isServerAlive()) {
+        if (!Server.isAlive()) {
             System.out.println("Server is sleeping");
 
             ServerThread serverThread = new ServerThread();
             serverThread.start();
 
             //while (true) {
-            client.sendMsg();
-
-            while (true)
-                client.receiveData();
             //}
+        }
+
+        Client client = new Client();
+
+        client.sendMsg();
+
+        while (true) {
+            client.sendMsg();
+            client.receiveData();
+
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 }
