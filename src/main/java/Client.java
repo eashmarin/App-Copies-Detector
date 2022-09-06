@@ -1,53 +1,96 @@
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.InetAddress;
-import java.net.MulticastSocket;
-import java.net.SocketTimeoutException;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class Client {
-    private final String msg = "Hello World! from client";
+    private String msg;
 
-    private byte[] inputmsg = new byte[100];
+    private final byte[] inputmsg = new byte[100];
 
-    MulticastSocket socket;
+    private final DatagramSocket clientSocket;
+
+    private final MulticastSocket rKnownSocket;
+    private final MulticastSocket rUnknownSocket;
+    private final MulticastSocket sKnownSocket;
+    private final MulticastSocket sUnknownSocket;
+
+    private static final int sKnownPort = 9000;
+    private static final int sUnknownPort = 9001;
+    private static final int rKnownPort = 9002;
+    private static final int rUnknownPort = 9003;
+
+    private Timer keepAliveTimer = new Timer();
 
     public Client() {
         try {
-            socket  = new MulticastSocket(8000);
+            int clientPort = 50000 + (int) (Math.random() * 100);
+            clientSocket = new DatagramSocket(clientPort);
 
-            //socket.connect(InetAddress.getLocalHost(), 8000);
-            socket.joinGroup(InetAddress.getByName("224.0.1.1"));
+            rKnownSocket = new MulticastSocket(rKnownPort);
+            rUnknownSocket = new MulticastSocket(rUnknownPort);
+            sKnownSocket = new MulticastSocket(sKnownPort);
+            sUnknownSocket = new MulticastSocket(sUnknownPort);
 
+            rKnownSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
+            rUnknownSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
+            sKnownSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
+            sUnknownSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
+
+            rKnownSocket.setSoTimeout(3000);
+            rUnknownSocket.setSoTimeout(3000);
+
+            msg = "Hello World! from client on port " + clientPort;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public void sendMsg() {
+    public void sendKeepAliveMsg() {
         try {
-            DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length,  InetAddress.getLocalHost(), 8080);
-            socket.send(packet);
+            DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length,  InetAddress.getByName("224.0.1.1"), sKnownPort);       //send to server
+            clientSocket.send(packet);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
     }
 
-    public void receiveData() {
+    public void receiveKeepAliveMsg() {
         try {
-            socket.setSoTimeout(10);
-            DatagramPacket packet = new DatagramPacket(inputmsg, msg.getBytes().length,  InetAddress.getLocalHost(), 8000);
-            socket.receive(packet);
+            DatagramPacket packet = new DatagramPacket(inputmsg, msg.getBytes().length);         // receive from server
+            rKnownSocket.receive(packet);
 
-            System.out.println("Client receives message: " + new String(packet.getData(), StandardCharsets.UTF_8));
+            //System.out.println("Client receives message: " + new String(packet.getData(), StandardCharsets.UTF_8));
         } catch (SocketTimeoutException e) {
-            // ServerThread serverThread = new ServerThread();
-            // serverThread.start();
+            System.out.println("Server is dead, restarting...");
+            ServerThread serverThread = new ServerThread();
+            serverThread.start();
+            sayHiToServer();
         }
         catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public void startSession() {
+        keepAliveTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                sendKeepAliveMsg();
+                receiveKeepAliveMsg();
+            }
+        },0, 1000);
+    }
+
+    public void sayHiToServer() {
+        System.out.println("sayHiToServer() is called");
+        try {
+            DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length, InetAddress.getByName("224.0.1.1"), sUnknownPort);
+            clientSocket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }
