@@ -1,20 +1,19 @@
 import java.io.IOException;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
 import java.util.*;
 
 public class Server {
     private final String msgToSend = "Hello World! from server";
 
     private int copiesCounter;
+    private int portCounter;
 
     private final byte[] buffer = new byte[40];
 
     private final DatagramSocket serverSocket;
-    private final MulticastSocket rKnownSocket;
-    private final MulticastSocket rUnknownSocket;
-    private final MulticastSocket sKnownSocket;
-    private final MulticastSocket sUnknownSocket;
+    private final MulticastSocket mcastSocketForRegularMsg;
+    private final MulticastSocket mcastSocketForHiMsg;
 
     private static final int serverPort = 8080;
     private static final int rKnownPort = 9000;
@@ -30,18 +29,14 @@ public class Server {
         try {
             serverSocket = new DatagramSocket(serverPort);
 
-            rKnownSocket = new MulticastSocket(rKnownPort);
-            rUnknownSocket = new MulticastSocket(rUnknownPort);
-            sKnownSocket = new MulticastSocket(sKnownPort);
-            sUnknownSocket = new MulticastSocket(sUnknownPort);
+            mcastSocketForRegularMsg = new MulticastSocket(rKnownPort);
+            mcastSocketForHiMsg = new MulticastSocket(rUnknownPort);
 
-            rKnownSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
-            rUnknownSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
-            sKnownSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
-            sUnknownSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
+            mcastSocketForRegularMsg.joinGroup(InetAddress.getByName("224.0.1.1"));
+            mcastSocketForHiMsg.joinGroup(InetAddress.getByName("224.0.1.1"));
 
-            rKnownSocket.setSoTimeout(3000);
-            rUnknownSocket.setSoTimeout(3000);
+            mcastSocketForRegularMsg.setSoTimeout(3000);
+            mcastSocketForHiMsg.setSoTimeout(3000);
             serverSocket.setSoTimeout(3000);
 
             keepAliveTimer.scheduleAtFixedRate(new TimerTask() {
@@ -71,8 +66,10 @@ public class Server {
     }
 
     private void sendToUnknownClients() {
+        int portToSend = 50000 + portCounter;
+        byte[] data = ByteBuffer.allocate(4).putInt(portToSend).array();
         try {
-            DatagramPacket packet = new DatagramPacket(msgToSend.getBytes(), msgToSend.getBytes().length, InetAddress.getByName("224.0.1.1"), sUnknownPort);
+            DatagramPacket packet = new DatagramPacket(data, data.length, InetAddress.getByName("224.0.1.1"), sUnknownPort);
             serverSocket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
@@ -88,17 +85,14 @@ public class Server {
         DatagramPacket packet = null;
 
         try {
-            rKnownSocket.setSoTimeout(1000);
+            mcastSocketForRegularMsg.setSoTimeout(1000);
 
             packet = new DatagramPacket(buffer, buffer.length);
 
             addressList.clear();
 
             for (int i = 0; i < copiesCounter; i++) {
-                rKnownSocket.receive(packet);
-                //InetAddress senderAddress = InetAddress.getByName(packet.getData().toString());
-                //System.out.println(senderAddress);
-                //addressList.add(new InetSocketAddress());
+                mcastSocketForRegularMsg.receive(packet);
                 addressList.add((InetSocketAddress) packet.getSocketAddress());
                 //System.out.println(String.format("Server receives packet (\"%s\") ", new String(packet.getData(), StandardCharsets.UTF_8)));
             }
@@ -113,15 +107,16 @@ public class Server {
 
     private void receiveFromUnknownClients() {
         try {
-            rUnknownSocket.setSoTimeout(1000);
+            mcastSocketForHiMsg.setSoTimeout(1000);
 
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-            rUnknownSocket.receive(packet);
+            mcastSocketForHiMsg.receive(packet);
 
             InetSocketAddress clientAddress = (InetSocketAddress) packet.getSocketAddress();
 
             System.out.println("socket address " + clientAddress + " is saved(" + packet.getAddress() + ")");
             copiesCounter++;
+            portCounter++;
             addressList.add(clientAddress);
             printAliveClientsAddresses();
         }
