@@ -16,7 +16,7 @@
     </properties>
 
     <build>
-        <finalName>test</finalName>
+        <finalName>detector</finalName>
         <defaultGoal>package</defaultGoal>
         <plugins>
             <plugin>
