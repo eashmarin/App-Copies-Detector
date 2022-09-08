@@ -1,7 +1,10 @@
 import java.io.IOException;
 import java.net.*;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
 public class Server {
     private final String msgToSend = "Hello World! from server";
@@ -21,36 +24,40 @@ public class Server {
     private static final int sKnownPort = 9002;
     private static final int sUnknownPort = 9003;
 
+    private static final int basePort = 10000 + (int) (Math.random() * 40000);
+
+    private final String mcastaddr;
+
     private Timer keepAliveTimer = new Timer();
 
-    private final List<InetSocketAddress> addressList = new LinkedList<>();
+    private HashSet<InetSocketAddress> aliveCopies = new HashSet<>();
 
-    public Server() {
+    public Server(String mcastaddr) {
         try {
+            this.mcastaddr = mcastaddr;
+
             serverSocket = new DatagramSocket(serverPort);
 
             mcastSocketForRegularMsg = new MulticastSocket(rKnownPort);
             mcastSocketForHiMsg = new MulticastSocket(rUnknownPort);
 
-            mcastSocketForRegularMsg.joinGroup(InetAddress.getByName("224.0.1.1"));
-            mcastSocketForHiMsg.joinGroup(InetAddress.getByName("224.0.1.1"));
+            mcastSocketForRegularMsg.joinGroup(InetAddress.getByName(mcastaddr));
+            mcastSocketForHiMsg.joinGroup(InetAddress.getByName(mcastaddr));
 
             mcastSocketForRegularMsg.setSoTimeout(3000);
             mcastSocketForHiMsg.setSoTimeout(3000);
             serverSocket.setSoTimeout(3000);
-
-            keepAliveTimer.scheduleAtFixedRate(new TimerTask() {
-                @Override
-                public void run() {
-                    sendKeepAliveMsgs();
-                    receiveKeepAliveMsg();
-                }
-            },0, 1000);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
+    public void startSession() {
+        while(true) {
+            receiveKeepAliveMsg();
+            sendKeepAliveMsgs();
+        }
+    }
     private void sendKeepAliveMsgs() {
         sendToKnownClients();
         sendToUnknownClients();
@@ -58,7 +65,7 @@ public class Server {
 
     private void sendToKnownClients() {
         try {
-            DatagramPacket packet = new DatagramPacket(msgToSend.getBytes(), msgToSend.getBytes().length, InetAddress.getByName("224.0.1.1"), sKnownPort);
+            DatagramPacket packet = new DatagramPacket(msgToSend.getBytes(), msgToSend.getBytes().length, InetAddress.getByName(mcastaddr), sKnownPort);
             serverSocket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
@@ -66,10 +73,10 @@ public class Server {
     }
 
     private void sendToUnknownClients() {
-        int portToSend = 50000 + portCounter;
+        int portToSend = basePort + portCounter;
         byte[] data = ByteBuffer.allocate(4).putInt(portToSend).array();
         try {
-            DatagramPacket packet = new DatagramPacket(data, data.length, InetAddress.getByName("224.0.1.1"), sUnknownPort);
+            DatagramPacket packet = new DatagramPacket(data, data.length, InetAddress.getByName(mcastaddr), sUnknownPort);
             serverSocket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
@@ -85,16 +92,22 @@ public class Server {
         DatagramPacket packet = null;
 
         try {
-            mcastSocketForRegularMsg.setSoTimeout(1000);
+            mcastSocketForRegularMsg.setSoTimeout(5000);
 
             packet = new DatagramPacket(buffer, buffer.length);
 
-            addressList.clear();
+            aliveCopies.clear();
 
-            for (int i = 0; i < copiesCounter; i++) {
+            while (aliveCopies.size() < copiesCounter) {
                 mcastSocketForRegularMsg.receive(packet);
-                addressList.add((InetSocketAddress) packet.getSocketAddress());
-                //System.out.println(String.format("Server receives packet (\"%s\") ", new String(packet.getData(), StandardCharsets.UTF_8)));
+                InetSocketAddress copyAddress = (InetSocketAddress) packet.getSocketAddress();
+                //System.out.println("server receive " + copyAddress.toString());
+
+
+                if (aliveCopies.add(copyAddress))
+                    System.out.println(String.format("Server receives packet (\"%s\") ", new String(packet.getData(), StandardCharsets.UTF_8)));
+
+                //prevPacketChecksum = getCheckSum(packet.getData());
             }
         } catch (SocketTimeoutException e) {
             System.out.println("someone has dropped");
@@ -103,6 +116,12 @@ public class Server {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private long getCheckSum(byte[] bytes) {
+        Checksum crs32 = new CRC32();
+        crs32.update(bytes, 0, bytes.length);
+        return crs32.getValue();
     }
 
     private void receiveFromUnknownClients() {
@@ -114,11 +133,17 @@ public class Server {
 
             InetSocketAddress clientAddress = (InetSocketAddress) packet.getSocketAddress();
 
-            System.out.println("socket address " + clientAddress + " is saved(" + packet.getAddress() + ")");
-            copiesCounter++;
-            portCounter++;
-            addressList.add(clientAddress);
-            printAliveClientsAddresses();
+                //System.out.println("socket address " + clientAddress + " is saved(" + aliveCopies.size() + ")");
+
+                String response = "SAVED";
+
+                packet = new DatagramPacket(response.getBytes(), response.getBytes().length, InetAddress.getByName(mcastaddr), sUnknownPort);
+                serverSocket.send(packet);
+
+                copiesCounter++;
+                portCounter++;
+                aliveCopies.add(clientAddress);
+                printAliveClientsAddresses();
         }
         catch (IOException e) {
             // no messages from unknown hosts
@@ -127,21 +152,23 @@ public class Server {
 
     private void printAliveClientsAddresses() {
         System.out.println("Alive clients: ");
-        for (InetSocketAddress address: addressList) {
+        for (InetSocketAddress address: aliveCopies) {
             System.out.println(address);
         }
     }
 
-    public static boolean isAlive() {
+    public static boolean isAlive(String mcastaddr) {
         byte[] buf = new byte[100];
 
         try {
             MulticastSocket multicastSocket = new MulticastSocket(sUnknownPort);          // TODO: use socket class instance (should make instance static first)
-            multicastSocket.joinGroup(InetAddress.getByName("224.0.1.1"));
+            multicastSocket.joinGroup(InetAddress.getByName(mcastaddr));
             multicastSocket.setSoTimeout(5000);
 
             DatagramPacket receivedPacket = new DatagramPacket(buf, buf.length);
             multicastSocket.receive(receivedPacket);
+
+            //System.out.println("is alive receive packet: " + ByteBuffer.wrap(receivedPacket.getData()).toString());
         } catch (IOException e) {
             return false;
         }
