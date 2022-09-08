@@ -1,45 +1,36 @@
 import java.io.IOException;
 import java.net.*;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.zip.CRC32;
-import java.util.zip.Checksum;
 
 public class Server {
-    private final String msgToSend = "Hello World! from server";
-
     private int copiesCounter;
-    private int portCounter;
 
-    private final byte[] buffer = new byte[40];
+    private final byte[] buffer = new byte[100];
 
     private final DatagramSocket serverSocket;
     private final MulticastSocket mcastSocketForRegularMsg;
     private final MulticastSocket mcastSocketForHiMsg;
 
     private static final int serverPort = 8080;
-    private static final int rKnownPort = 9000;
-    private static final int rUnknownPort = 9001;
-    private static final int sKnownPort = 9002;
-    private static final int sUnknownPort = 9003;
 
-    private static final int basePort = 10000 + (int) (Math.random() * 40000);
+    private static final int regularMsgGetPort = 9000;
+    private static final int hiMsgGetPort = 9001;
+    private static final int regularMsgSendPort = 9002;
+    private static final int hiMsgSendPort = 9003;
 
     private final String mcastaddr;
 
-    private Timer keepAliveTimer = new Timer();
+    private final HashSet<InetSocketAddress> aliveCopies = new HashSet<>();
 
-    private HashSet<InetSocketAddress> aliveCopies = new HashSet<>();
+    public Server(String mcastaddr) throws SocketException {
+        serverSocket = new DatagramSocket(serverPort);
 
-    public Server(String mcastaddr) {
+        this.mcastaddr = mcastaddr;
+
         try {
-            this.mcastaddr = mcastaddr;
-
-            serverSocket = new DatagramSocket(serverPort);
-
-            mcastSocketForRegularMsg = new MulticastSocket(rKnownPort);
-            mcastSocketForHiMsg = new MulticastSocket(rUnknownPort);
+            mcastSocketForRegularMsg = new MulticastSocket(regularMsgGetPort);
+            mcastSocketForHiMsg = new MulticastSocket(hiMsgGetPort);
 
             mcastSocketForRegularMsg.joinGroup(InetAddress.getByName(mcastaddr));
             mcastSocketForHiMsg.joinGroup(InetAddress.getByName(mcastaddr));
@@ -53,30 +44,32 @@ public class Server {
     }
 
     public void startSession() {
-        while(true) {
+        while (true) {
             receiveKeepAliveMsg();
-            sendKeepAliveMsgs();
+            sendKeepAliveMsg();
         }
     }
-    private void sendKeepAliveMsgs() {
-        sendToKnownClients();
-        sendToUnknownClients();
+
+    private void sendKeepAliveMsg() {
+        sendRegularMsg();
+        sendAvailablePortToNewCopies();
     }
 
-    private void sendToKnownClients() {
+    private void sendRegularMsg() {
         try {
-            DatagramPacket packet = new DatagramPacket(msgToSend.getBytes(), msgToSend.getBytes().length, InetAddress.getByName(mcastaddr), sKnownPort);
+            String msg = "Hello from server";
+            DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length, InetAddress.getByName(mcastaddr), regularMsgSendPort);
             serverSocket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private void sendToUnknownClients() {
-        int portToSend = basePort + portCounter;
+    private void sendAvailablePortToNewCopies() {
+        int portToSend = 10000 + (int) (Math.random() * 40000);
         byte[] data = ByteBuffer.allocate(4).putInt(portToSend).array();
         try {
-            DatagramPacket packet = new DatagramPacket(data, data.length, InetAddress.getByName(mcastaddr), sUnknownPort);
+            DatagramPacket packet = new DatagramPacket(data, data.length, InetAddress.getByName(mcastaddr), hiMsgSendPort);
             serverSocket.send(packet);
         } catch (IOException e) {
             e.printStackTrace();
@@ -84,33 +77,24 @@ public class Server {
     }
 
     public void receiveKeepAliveMsg() {
-        receiveFromKnownClients();
-        receiveFromUnknownClients();
+        receiveRegularMsg();
+        receiveHiMsg();
     }
 
-    private void receiveFromKnownClients() {
-        DatagramPacket packet = null;
-
+    private void receiveRegularMsg() {
         try {
             mcastSocketForRegularMsg.setSoTimeout(5000);
 
-            packet = new DatagramPacket(buffer, buffer.length);
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
             aliveCopies.clear();
 
             while (aliveCopies.size() < copiesCounter) {
                 mcastSocketForRegularMsg.receive(packet);
-                InetSocketAddress copyAddress = (InetSocketAddress) packet.getSocketAddress();
-                //System.out.println("server receive " + copyAddress.toString());
-
-
-                if (aliveCopies.add(copyAddress))
-                    System.out.println(String.format("Server receives packet (\"%s\") ", new String(packet.getData(), StandardCharsets.UTF_8)));
-
-                //prevPacketChecksum = getCheckSum(packet.getData());
+                aliveCopies.add((InetSocketAddress) packet.getSocketAddress());
             }
         } catch (SocketTimeoutException e) {
-            System.out.println("someone has dropped");
+            System.out.println("Someone has disconnected...");
             copiesCounter--;
             printAliveClientsAddresses();
         } catch (IOException e) {
@@ -118,41 +102,30 @@ public class Server {
         }
     }
 
-    private long getCheckSum(byte[] bytes) {
-        Checksum crs32 = new CRC32();
-        crs32.update(bytes, 0, bytes.length);
-        return crs32.getValue();
-    }
-
-    private void receiveFromUnknownClients() {
+    private void receiveHiMsg() {
         try {
             mcastSocketForHiMsg.setSoTimeout(1000);
 
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
             mcastSocketForHiMsg.receive(packet);
 
-            InetSocketAddress clientAddress = (InetSocketAddress) packet.getSocketAddress();
+            aliveCopies.add((InetSocketAddress) packet.getSocketAddress());
+            copiesCounter++;
 
-                //System.out.println("socket address " + clientAddress + " is saved(" + aliveCopies.size() + ")");
+            System.out.println("Someone has connected...");
+            printAliveClientsAddresses();
 
-                String response = "SAVED";
-
-                packet = new DatagramPacket(response.getBytes(), response.getBytes().length, InetAddress.getByName(mcastaddr), sUnknownPort);
-                serverSocket.send(packet);
-
-                copiesCounter++;
-                portCounter++;
-                aliveCopies.add(clientAddress);
-                printAliveClientsAddresses();
-        }
-        catch (IOException e) {
-            // no messages from unknown hosts
+            String response = "SAVED";
+            packet = new DatagramPacket(response.getBytes(), response.getBytes().length, InetAddress.getByName(mcastaddr), hiMsgSendPort);
+            serverSocket.send(packet);
+        } catch (IOException e) {
+            // no hi messages
         }
     }
 
     private void printAliveClientsAddresses() {
         System.out.println("Alive clients: ");
-        for (InetSocketAddress address: aliveCopies) {
+        for (InetSocketAddress address : aliveCopies) {
             System.out.println(address);
         }
     }
@@ -161,18 +134,27 @@ public class Server {
         byte[] buf = new byte[100];
 
         try {
-            MulticastSocket multicastSocket = new MulticastSocket(sUnknownPort);          // TODO: use socket class instance (should make instance static first)
+            MulticastSocket multicastSocket = new MulticastSocket(hiMsgSendPort);
             multicastSocket.joinGroup(InetAddress.getByName(mcastaddr));
             multicastSocket.setSoTimeout(5000);
 
             DatagramPacket receivedPacket = new DatagramPacket(buf, buf.length);
             multicastSocket.receive(receivedPacket);
-
-            //System.out.println("is alive receive packet: " + ByteBuffer.wrap(receivedPacket.getData()).toString());
         } catch (IOException e) {
             return false;
         }
 
         return true;
+    }
+
+    public static PortContext getPortContext() {
+        PortContext context = new PortContext();
+
+        context.setRegularMsgSendPort(regularMsgGetPort);
+        context.setHiMsgSendPort(hiMsgGetPort);
+        context.setRegularMsgGetPort(regularMsgSendPort);
+        context.setHiMsgGetPort(hiMsgSendPort);
+
+        return context;
     }
 }
