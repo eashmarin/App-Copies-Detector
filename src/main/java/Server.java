@@ -35,8 +35,8 @@ public class Server {
             mcastSocketForRegularMsg.joinGroup(InetAddress.getByName(mcastaddr));
             mcastSocketForHiMsg.joinGroup(InetAddress.getByName(mcastaddr));
 
-            mcastSocketForRegularMsg.setSoTimeout(3000);
-            mcastSocketForHiMsg.setSoTimeout(3000);
+            mcastSocketForRegularMsg.setSoTimeout(5000);
+            mcastSocketForHiMsg.setSoTimeout(1000);
             serverSocket.setSoTimeout(3000);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -83,8 +83,6 @@ public class Server {
 
     private void receiveRegularMsg() {
         try {
-            mcastSocketForRegularMsg.setSoTimeout(5000);
-
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
             aliveCopies.clear();
@@ -104,8 +102,6 @@ public class Server {
 
     private void receiveHiMsg() {
         try {
-            mcastSocketForHiMsg.setSoTimeout(1000);
-
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
             mcastSocketForHiMsg.receive(packet);
 

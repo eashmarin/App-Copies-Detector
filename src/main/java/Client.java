@@ -12,14 +12,12 @@ public class Client {
     private final MulticastSocket mcastSocketForRegularMsg;
     private final MulticastSocket mcastSocketForHiMsg;
 
-    PortContext portContext;
+    private final PortContext portContext;
 
     private final String mcastaddr;
 
     public Client(String mcastaddr, PortContext portContext) {
         try {
-            System.out.println("Init client...");
-
             this.mcastaddr = mcastaddr;
             this.portContext = portContext;
 
@@ -55,19 +53,18 @@ public class Client {
             mcastSocketForRegularMsg.receive(packet);
         } catch (SocketTimeoutException e) {
             System.out.println("Server is dead, restarting...");
-            launchServerAndInitNewClient();
+            launchServer();
+            sendHiMsgToServer();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private void launchServerAndInitNewClient() {
+    private void launchServer() {
         try {
             Server server = new Server(mcastaddr);
             ServerThread serverThread = new ServerThread(server);
             serverThread.start();
-
-            sendHiMsgToServer();
         } catch (SocketException ex) {
             System.out.println("error while launching server (prob. server is already raised up by another copy)");
             sendHiMsgToServer();
