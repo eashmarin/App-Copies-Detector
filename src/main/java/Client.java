@@ -21,14 +21,11 @@ public class Client {
             this.mcastaddr = mcastaddr;
             this.portContext = portContext;
 
-            mcastSocketForRegularMsg = new MulticastSocket(portContext.getRegularMsgGetPort());
+            mcastSocketForRegularMsg = new MulticastSocket(portContext.getKeepAliveMsgGetPort());
             mcastSocketForHiMsg = new MulticastSocket(portContext.getHiMsgGetPort());
 
             mcastSocketForRegularMsg.joinGroup(InetAddress.getByName(this.mcastaddr));
             mcastSocketForHiMsg.joinGroup(InetAddress.getByName(this.mcastaddr));
-
-            mcastSocketForRegularMsg.setSoTimeout(8000);
-            mcastSocketForHiMsg.setSoTimeout(3000);
 
             initClientSocket();
 
@@ -38,9 +35,31 @@ public class Client {
         }
     }
 
+    public void startSession() {
+        while (true) {
+            swapHiMsgWithServer();
+            sendKeepAliveMsg();
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            receiveKeepAliveMsg();
+        }
+    }
+
+    private void swapHiMsgWithServer() {
+        try {
+            DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length, InetAddress.getByName(mcastaddr), portContext.getHiMsgSendPort());
+            clientSocket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     private void sendKeepAliveMsg() {
         try {
-            DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length, InetAddress.getByName(mcastaddr), portContext.getRegularMsgSendPort());       //send to server
+            DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length, InetAddress.getByName(mcastaddr), portContext.getKeepAliveMsgSendPort());
             clientSocket.send(packet);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -51,36 +70,8 @@ public class Client {
         try {
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
             mcastSocketForRegularMsg.receive(packet);
-        } catch (SocketTimeoutException e) {
-            System.out.println("Server is dead, restarting...");
-            launchServer();
-            sendHiMsgToServer();
-        } catch (IOException e) {
+        }  catch (IOException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    private void launchServer() {
-        try {
-            Server server = new Server(mcastaddr);
-            ServerThread serverThread = new ServerThread(server);
-            serverThread.start();
-        } catch (SocketException ex) {
-            System.out.println("error while launching server (prob. server is already raised up by another copy)");
-            sendHiMsgToServer();
-        }
-    }
-
-    public void startSession() {
-        sendHiMsgToServer();
-        while (true) {
-            receiveKeepAliveMsg();
-            sendKeepAliveMsg();
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 
@@ -103,15 +94,4 @@ public class Client {
         return ByteBuffer.wrap(buffer).getInt();
     }
 
-    private void sendHiMsgToServer() {
-        try {
-            DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length, InetAddress.getByName(mcastaddr), portContext.getHiMsgSendPort());
-            clientSocket.send(packet);
-
-            packet = new DatagramPacket(buffer, buffer.length);
-            mcastSocketForHiMsg.receive(packet);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
 }

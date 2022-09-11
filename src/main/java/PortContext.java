@@ -1,8 +1,25 @@
+import java.io.IOException;
+import java.util.Properties;
+
 public class PortContext {
-    private int regularMsgSendPort = 9000;
-    private int hiMsgSendPort = 9001;
-    private int regularMsgGetPort = 9002;
-    private int hiMsgGetPort = 9003;
+    private int keepAliveMsgSendPort;
+    private int hiMsgSendPort;
+    private int keepAliveMsgGetPort;
+    private int hiMsgGetPort;
+
+    public PortContext() {
+        Properties properties = new Properties();
+        try {
+            properties.load(PortContext.class.getResourceAsStream("/ports.properties"));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        keepAliveMsgSendPort = Integer.parseInt(properties.getProperty("keepAliveMsgSendPort"));
+        hiMsgSendPort = Integer.parseInt(properties.getProperty("hiMsgSendPort"));
+        keepAliveMsgGetPort = Integer.parseInt(properties.getProperty("keepAliveMsgGetPort"));
+        hiMsgGetPort = Integer.parseInt(properties.getProperty("hiMsgGetPort"));
+    }
 
     public int getHiMsgGetPort() {
         return hiMsgGetPort;
@@ -12,12 +29,12 @@ public class PortContext {
         this.hiMsgGetPort = hiMsgGetPort;
     }
 
-    public int getRegularMsgGetPort() {
-        return regularMsgGetPort;
+    public int getKeepAliveMsgGetPort() {
+        return keepAliveMsgGetPort;
     }
 
-    public void setRegularMsgGetPort(int regularMsgGetPort) {
-        this.regularMsgGetPort = regularMsgGetPort;
+    public void setKeepAliveMsgGetPort(int keepAliveMsgGetPort) {
+        this.keepAliveMsgGetPort = keepAliveMsgGetPort;
     }
 
     public int getHiMsgSendPort() {
@@ -28,11 +45,11 @@ public class PortContext {
         this.hiMsgSendPort = hiMsgSendPort;
     }
 
-    public int getRegularMsgSendPort() {
-        return regularMsgSendPort;
+    public int getKeepAliveMsgSendPort() {
+        return keepAliveMsgSendPort;
     }
 
-    public void setRegularMsgSendPort(int regularMsgSendPort) {
-        this.regularMsgSendPort = regularMsgSendPort;
+    public void setKeepAliveMsgSendPort(int keepAliveMsgSendPort) {
+        this.keepAliveMsgSendPort = keepAliveMsgSendPort;
     }
 }

@@ -24,3 +24,6 @@ hs_err_pid*
 
 /.idea
 /App-Copies-Detector.iml
+/target/classes
+/target/maven-archiver
+/target/maven-status

@@ -1,18 +1,17 @@
-import java.net.SocketException;
-
 public class Main {
-    public static void main(String[] args) throws SocketException {
+    public static void main(String[] args)  {
         if (args.length == 1) {
-            if (!Server.isAlive(args[0])) {
-                Server server = new Server(args[0]);
-                ServerThread serverThread = new ServerThread(server);
-                serverThread.start();
-            }
+            PortContext portContext = new PortContext();
 
-            Client client = new Client(args[0], Server.getPortContext());
+            Server server = new Server(args[0], portContext);
+            Thread serverThread = new Thread(server::startSession);
+            serverThread.start();
+
+            Client client = new Client(args[0], portContext);
             client.startSession();
         }
-        else
-            System.out.println("invalid argument");
+        else {
+            System.out.println("Invalid argument, multicast address is needed");
+        }
     }
 }
