@@ -2,10 +2,10 @@ import java.io.IOException;
 import java.util.Properties;
 
 public class PortContext {
-    private int keepAliveMsgSendPort;
-    private int hiMsgSendPort;
-    private int keepAliveMsgGetPort;
-    private int hiMsgGetPort;
+    private final int keepAliveMsgSendPort;
+    private final int hiMsgSendPort;
+    private final int keepAliveMsgGetPort;
+    private final int hiMsgGetPort;
 
     public PortContext() {
         Properties properties = new Properties();
@@ -25,31 +25,15 @@ public class PortContext {
         return hiMsgGetPort;
     }
 
-    public void setHiMsgGetPort(int hiMsgGetPort) {
-        this.hiMsgGetPort = hiMsgGetPort;
-    }
-
     public int getKeepAliveMsgGetPort() {
         return keepAliveMsgGetPort;
-    }
-
-    public void setKeepAliveMsgGetPort(int keepAliveMsgGetPort) {
-        this.keepAliveMsgGetPort = keepAliveMsgGetPort;
     }
 
     public int getHiMsgSendPort() {
         return hiMsgSendPort;
     }
 
-    public void setHiMsgSendPort(int hiMsgSendPort) {
-        this.hiMsgSendPort = hiMsgSendPort;
-    }
-
     public int getKeepAliveMsgSendPort() {
         return keepAliveMsgSendPort;
-    }
-
-    public void setKeepAliveMsgSendPort(int keepAliveMsgSendPort) {
-        this.keepAliveMsgSendPort = keepAliveMsgSendPort;
     }
 }

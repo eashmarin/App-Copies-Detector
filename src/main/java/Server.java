@@ -14,8 +14,6 @@ public class Server {
 
     private static final int serverPort = 1 + (int) (Math.random() * 65000);
 
-    private final int keepAliveMsgGetPort;
-    private final int hiMsgGetPort;
     private final int keepAliveMsgSendPort ;
     private final int hiMsgSendPort;
 
@@ -27,8 +25,8 @@ public class Server {
     public Server(String mcastaddr, PortContext portContext) {
         this.mcastaddr = mcastaddr;
 
-        this.keepAliveMsgGetPort = portContext.getKeepAliveMsgSendPort();
-        this.hiMsgGetPort = portContext.getHiMsgSendPort();
+        int keepAliveMsgGetPort = portContext.getKeepAliveMsgSendPort();
+        int hiMsgGetPort = portContext.getHiMsgSendPort();
         this.keepAliveMsgSendPort = portContext.getKeepAliveMsgGetPort();
         this.hiMsgSendPort = portContext.getHiMsgGetPort();
 

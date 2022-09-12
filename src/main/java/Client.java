@@ -37,7 +37,7 @@ public class Client {
 
     public void startSession() {
         while (true) {
-            swapHiMsgWithServer();
+            sendHiMsg();
             sendKeepAliveMsg();
             try {
                 Thread.sleep(1000);
@@ -48,7 +48,7 @@ public class Client {
         }
     }
 
-    private void swapHiMsgWithServer() {
+    private void sendHiMsg() {
         try {
             DatagramPacket packet = new DatagramPacket(msg.getBytes(), msg.getBytes().length, InetAddress.getByName(mcastaddr), portContext.getHiMsgSendPort());
             clientSocket.send(packet);
